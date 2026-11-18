@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modelo FBX Catwalk - Graficación</title>
+  <link rel="stylesheet" href="main.css">
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+    #info { display:none; }
+    #etiqueta { position: fixed; top: 16px; left: 18px; z-index: 5; background: #121f33cc; color: white; padding: 13px 17px; border-radius: 9px; }
+    #etiqueta strong { display:block; font-size:18px; margin-bottom:4px; }
+    #etiqueta span { font-size:12px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../build/three.module.js", "three/addons/": "./jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="etiqueta">
+    <strong>Modelo Catwalk</strong>
+    <span id="estado">Cargando modelo FBX...</span><br>
+    <span>Julio Emanuel Díaz Jiménez · Graficación</span>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+
+    const escena = new THREE.Scene();
+    escena.background = new THREE.Color(0x8d98a9);
+    const camara = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 1500);
+    camara.position.set(140, 160, 290);
+    const renderizador = new THREE.WebGLRenderer({antialias:true});
+    renderizador.setSize(innerWidth, innerHeight);
+    renderizador.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderizador.shadowMap.enabled = true;
+    document.body.appendChild(renderizador.domElement);
+
+    const controles = new OrbitControls(camara, renderizador.domElement);
+    controles.target.set(0, 85, 0);
+    controles.enableDamping = true;
+    controles.update();
+
+    // Iluminación superior y luz ambiental de la práctica 3.3.
+    escena.add(new THREE.HemisphereLight(0xffffff, 0x506070, 2.5));
+    const luzSuperior = new THREE.DirectionalLight(0xffffff, 3.3);
+    luzSuperior.position.set(80, 260, 100);
+    luzSuperior.castShadow = true;
+    escena.add(luzSuperior);
+
+    const piso = new THREE.Mesh(
+      new THREE.PlaneGeometry(400, 400),
+      new THREE.MeshStandardMaterial({color:0xb9c2ca, roughness:.8})
+    );
+    piso.rotation.x = -Math.PI / 2;
+    piso.position.y = -1;
+    piso.receiveShadow = true;
+    escena.add(piso);
+
+    // Material con brillo y textura de imagen para el personaje.
+    const textura = new THREE.TextureLoader().load('texturas/traje_flair.png');
+    textura.colorSpace = THREE.SRGBColorSpace;
+    let mezclador;
+    new FBXLoader().load('models/fbx/Catwalk%20Idle%20To%20Twist%20R.fbx', grupo => {
+      const cubo = grupo.getObjectByName('Cube');
+      if (cubo) cubo.removeFromParent();
+      grupo.traverse(objeto => {
+        if (objeto.isCamera || objeto.isLight) objeto.visible = false;
+        if (objeto.isMesh) {
+          objeto.material = new THREE.MeshStandardMaterial({map:textura, roughness:.45, metalness:.15, side:THREE.DoubleSide});
+          objeto.castShadow = true;
+        }
+      });
+      grupo.updateMatrixWorld(true);
+      const caja = new THREE.Box3().setFromObject(grupo);
+      const alto = caja.getSize(new THREE.Vector3()).y;
+      if (Number.isFinite(alto) && alto > 0) grupo.scale.multiplyScalar(170 / alto);
+      grupo.updateMatrixWorld(true);
+      const nuevaCaja = new THREE.Box3().setFromObject(grupo);
+      const centro = nuevaCaja.getCenter(new THREE.Vector3());
+      grupo.position.set(-centro.x, -nuevaCaja.min.y, -centro.z);
+      escena.add(grupo);
+      if (grupo.animations.length) {
+        mezclador = new THREE.AnimationMixer(grupo);
+        mezclador.clipAction(grupo.animations[0]).play();
+      }
+      document.getElementById('estado').textContent = 'Animación de pasarela';
+    }, undefined, error => {
+      console.error(error);
+      document.getElementById('estado').textContent = 'Error al cargar el archivo FBX';
+    });
+
+    addEventListener('resize', () => {
+      camara.aspect = innerWidth / innerHeight;
+      camara.updateProjectionMatrix();
+      renderizador.setSize(innerWidth, innerHeight);
+    });
+    const reloj = new THREE.Clock();
+    renderizador.setAnimationLoop(() => {
+      const delta = reloj.getDelta();
+      if (mezclador) mezclador.update(delta);
+      controles.update();
+      renderizador.render(escena, camara);
+    });
+  </script>
+</body>
+</html>

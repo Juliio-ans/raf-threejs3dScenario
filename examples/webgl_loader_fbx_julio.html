@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Escenario 3D - Julio Emanuel Díaz Jiménez</title>
+  <link rel="stylesheet" href="main.css">
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; color: white; }
+    #info { display: none; }
+    #panel { position: fixed; top: 18px; left: 18px; z-index: 10; width: min(335px, calc(100vw - 60px)); padding: 17px 19px; background: rgba(15, 20, 34, .87); border: 1px solid #566581; border-radius: 12px; box-shadow: 0 7px 30px #0008; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    #panel p { margin: 7px 0; color: #ced9e9; font-size: 13px; line-height: 1.5; }
+    #estado { color: #a9dbfa; }
+    button { margin: 11px 7px 2px 0; padding: 9px 12px; border: 0; border-radius: 6px; color: #081523; background: #8fd9f7; font-weight: bold; cursor: pointer; }
+    button:disabled { opacity: .45; cursor: progress; }
+    #vista { background: #e0e5ef; }
+    #alumno { position: fixed; bottom: 13px; right: 15px; color: white; background: #15233b99; padding: 7px 10px; border-radius: 5px; font-size: 12px; pointer-events: none; }
+    @media(max-width: 530px) { #panel { top: 8px; left: 8px; padding: 12px; } h1 { font-size: 17px; } #alumno { display: none; } }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../build/three.module.js", "three/addons/": "./jsm/" } }
+  </script>
+</head>
+<body>
+  <section id="panel">
+    <h1>Pasarela urbana 3D</h1>
+    <p>Personaje de Mixamo con animación, fondo HDR, piso texturizado y música.</p>
+    <p id="estado" role="status">Preparando escenario...</p>
+    <button id="musica" disabled>Preparando música...</button>
+    <button id="vista">Centrar cámara</button>
+    <p>Arrastra para girar y usa la rueda del mouse para acercar.</p>
+  </section>
+  <span id="alumno">Julio Emanuel Díaz Jiménez · Graficación</span>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+    // Modelo seleccionado del ZIP con cinco archivos FBX proporcionados por Julio.
+    const ARCHIVO_FBX = 'Catwalk Idle To Twist R.fbx';
+    const RUTA_HDR = 'models/rgbe/cedar_bridge_sunset_2k.hdr';
+    const RUTA_MP3 = 'models/rgbe/musica.m4a';
+
+    const estado = document.getElementById('estado');
+    const botonMusica = document.getElementById('musica');
+    const escena = new THREE.Scene();
+    escena.background = new THREE.Color(0x253448);
+
+    const camara = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 1, 2000);
+    camara.position.set(150, 168, 295);
+
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    document.body.appendChild(renderer.domElement);
+
+    const controles = new OrbitControls(camara, renderer.domElement);
+    controles.target.set(0, 90, 0);
+    controles.enableDamping = true;
+    controles.minDistance = 100;
+    controles.maxDistance = 630;
+    controles.update();
+
+    document.getElementById('vista').addEventListener('click', () => {
+      camara.position.set(150, 168, 295);
+      controles.target.set(0, 90, 0);
+      controles.update();
+    });
+
+    // Luz superior e iluminación de apoyo, como solicita la práctica 3.3.
+    const luzAmbiente = new THREE.HemisphereLight(0xfff4e7, 0x384969, 2.2);
+    escena.add(luzAmbiente);
+    const foco = new THREE.DirectionalLight(0xffffff, 3.2);
+    foco.position.set(100, 250, 130);
+    foco.castShadow = true;
+    foco.shadow.mapSize.set(2048, 2048);
+    foco.shadow.camera.left = foco.shadow.camera.bottom = -230;
+    foco.shadow.camera.right = foco.shadow.camera.top = 230;
+    escena.add(foco);
+
+    // 1. HDR: da un fondo panorámico de 360 grados y reflejos ambientales.
+    new RGBELoader().load(RUTA_HDR, textura => {
+      textura.mapping = THREE.EquirectangularReflectionMapping;
+      escena.background = textura;
+      escena.environment = textura;
+    }, undefined, error => {
+      console.error('No se pudo cargar el HDR:', error);
+      estado.textContent = 'El personaje puede funcionar, pero falló el fondo HDR.';
+    });
+
+    // 2. Piso cuadrado: se utiliza una imagen repetida sobre el plano.
+    const texturaPiso = new THREE.TextureLoader().load('texturas/piso_danza.png');
+    texturaPiso.colorSpace = THREE.SRGBColorSpace;
+    texturaPiso.wrapS = texturaPiso.wrapT = THREE.RepeatWrapping;
+    texturaPiso.repeat.set(3, 3);
+    const piso = new THREE.Mesh(
+      new THREE.PlaneGeometry(300, 300),
+      new THREE.MeshStandardMaterial({map:texturaPiso, roughness:.55, metalness:.2})
+    );
+    piso.rotation.x = -Math.PI / 2;
+    piso.position.y = -1;
+    piso.receiveShadow = true;
+    escena.add(piso);
+
+    const base = new THREE.Mesh(new THREE.BoxGeometry(308, 5, 308), new THREE.MeshStandardMaterial({color:0x1b2435, metalness:.62, roughness:.42}));
+    base.position.y = -4;
+    base.receiveShadow = true;
+    escena.add(base);
+
+    // 3. Textura o skin del FBX: una imagen sobre la superficie del modelo.
+    const texturaPersonaje = new THREE.TextureLoader().load('texturas/traje_flair.png');
+    texturaPersonaje.colorSpace = THREE.SRGBColorSpace;
+    let mezclador;
+    new FBXLoader().load('models/fbx/' + encodeURIComponent(ARCHIVO_FBX), grupo => {
+      // El FBX exportado también trae el cubo de ejemplo de Blender; se oculta.
+      const cuboExtra = grupo.getObjectByName('Cube');
+      if (cuboExtra) cuboExtra.removeFromParent();
+      grupo.traverse(parte => {
+        if (parte.isCamera || parte.isLight) parte.visible = false;
+      });
+      grupo.traverse(parte => {
+        if (parte.isMesh) {
+          parte.material = new THREE.MeshStandardMaterial({map:texturaPersonaje, color:0xffffff, roughness:.4, metalness:.12, side:THREE.DoubleSide});
+          parte.castShadow = true;
+          parte.receiveShadow = true;
+        }
+      });
+      if (grupo.animations.length) {
+        mezclador = new THREE.AnimationMixer(grupo);
+        mezclador.clipAction(grupo.animations[0]).play();
+      }
+      // Ajuste de escala y ubicación para que el modelo quede sobre la pasarela.
+      grupo.updateMatrixWorld(true);
+      const limites = new THREE.Box3().setFromObject(grupo);
+      const alto = limites.getSize(new THREE.Vector3()).y;
+      if (Number.isFinite(alto) && alto > 0) grupo.scale.multiplyScalar(170 / alto);
+      grupo.updateMatrixWorld(true);
+      const ajustado = new THREE.Box3().setFromObject(grupo);
+      const centro = ajustado.getCenter(new THREE.Vector3());
+      grupo.position.x -= centro.x;
+      grupo.position.z -= centro.z;
+      grupo.position.y -= ajustado.min.y;
+      escena.add(grupo);
+      estado.textContent = 'Escenario listo. Modelo: ' + ARCHIVO_FBX;
+    }, progreso => {
+      if (progreso.total) estado.textContent = 'Cargando personaje: ' + Math.round(progreso.loaded / progreso.total * 100) + '%';
+    }, error => {
+      console.error('Error al abrir FBX:', error);
+      estado.textContent = 'No se pudo cargar el modelo FBX. Revisa el nombre del archivo.';
+    });
+
+    // 4. Audio: el navegador necesita que el usuario pulse el botón para sonar.
+    const oyente = new THREE.AudioListener();
+    camara.add(oyente);
+    const sonido = new THREE.Audio(oyente);
+    let audioListo = false;
+    new THREE.AudioLoader().load(RUTA_MP3, buffer => {
+      sonido.setBuffer(buffer);
+      sonido.setLoop(true);
+      sonido.setVolume(.65);
+      audioListo = true;
+      botonMusica.disabled = false;
+      botonMusica.textContent = 'Reproducir música';
+    }, undefined, error => {
+      console.error('No se pudo cargar la música:', error);
+      botonMusica.textContent = 'Error de audio';
+    });
+    botonMusica.addEventListener('click', async () => {
+      if (!audioListo) return;
+      if (sonido.isPlaying) {
+        sonido.pause();
+        botonMusica.textContent = 'Reanudar música';
+      } else {
+        await oyente.context.resume();
+        sonido.play();
+        botonMusica.textContent = 'Pausar música';
+      }
+    });
+
+    addEventListener('resize', () => {
+      camara.aspect = innerWidth / innerHeight;
+      camara.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    const reloj = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      if (mezclador) mezclador.update(reloj.getDelta());
+      else reloj.getDelta();
+      controles.update();
+      renderer.render(escena, camara);
+    });
+  </script>
+</body>
+</html>
